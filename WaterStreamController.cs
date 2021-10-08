@@ -4,57 +4,57 @@ using UnityEngine;
 
 public class WaterStreamController : MonoBehaviour
 {
-    private const float requiredDestroyTime = 1f;       // 지속 시간    
-    private const float requiredTransitionTime = 0.12f; // 물줄기가 퍼져나가나는 시간
-    private const float startShortenTime = requiredDestroyTime - requiredTransitionTime; // 물줄기가 다시 줄어드는 시간
+    private const float destroyTime = 1f;       // 물줄기 지속 시간    
+    private const float transitionTime = 0.12f; // 물줄기가 퍼져나가나는 시간
+    private const float startShortenTime = destroyTime - transitionTime; // 물줄기가 다시 줄어드는 시간
 
     IEnumerator Boom(object[] args)
     {
-        Vector3 originPos = transform.position;     // 위치
-        Vector3 desiredPos = (Vector3)args[0];      
-        Vector3 desiredMoveVec = (Vector3)args[1];
-        Vector3 desiredScale = (Vector3)args[2];
-        Vector3 tmpScale = desiredScale;
-        int[] index = (int[])args[3];
-
+        Vector3 originPos = transform.position;     // 물줄기 근원지 ( 물폭탄 위치 )
+        Vector3 expandedPos = (Vector3)args[0];     // 물줄기 팽창시 최종 위치
+        Vector3 toExpandedVec = (Vector3)args[1];   // 물줄기 이동 벡터
+        Vector3 expandedScale = (Vector3)args[2];   // 물줄기
+        Vector3 tmpScale = expandedScale;
+        int[] index = (int[])args[3];               // 물줄기에 닿은 블록의 인덱스
         float time = 0f;
-        float ratio;
 
+        // 물줄기 팽창
         do {
             yield return null;
 
             time += Time.deltaTime;
-            ratio = time / requiredTransitionTime;
+            float progress = Mathf.Clamp01(time / transitionTime);
 
-            transform.position = originPos + desiredMoveVec * ratio;
-            tmpScale.z = desiredScale.z * ratio;
+            transform.position = originPos + toExpandedVec * progress;
+            tmpScale.z = expandedScale.z * progress;
             transform.localScale = tmpScale;
-        } while (time < requiredTransitionTime);
+        } while (time < transitionTime);
 
-        transform.position = desiredPos;
-        transform.localScale = desiredScale;
-
+        // 물줄기에 닿은 블록 파괴
         for (int i = 0; i < 2; ++i)
         {
             if (index[i] != -1 && BlockGenerator.Inst.HasBlock(index[i]))
                 BlockGenerator.Inst.DestroyBlock(index[i]);
         }
 
+        // 물줄기 수축까지 대기
         do {
             yield return null;
             time += Time.deltaTime;
         } while (time < startShortenTime);
 
+        // 물줄기 수축
         do
         {
             yield return null;
-            time += Time.deltaTime;
-            ratio = (time - startShortenTime) / requiredTransitionTime;
 
-            transform.position = desiredPos - desiredMoveVec * ratio;
-            tmpScale.z = desiredScale.z * (1 - ratio);
+            time += Time.deltaTime;
+            float progress = Mathf.Clamp01((time - startShortenTime) / transitionTime);
+
+            transform.position = expandedPos - toExpandedVec * progress;
+            tmpScale.z = expandedScale.z * (1 - progress);
             transform.localScale = tmpScale;
-        } while (time < requiredDestroyTime);
+        } while (time < destroyTime);
 
         WaterStreamGenerator.Inst.DestroyWaterStream(gameObject);
     }

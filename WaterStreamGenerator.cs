@@ -36,19 +36,18 @@ public class WaterStreamGenerator : MonoBehaviour
 
         void generate(Vector3 rotation)
         {
-            // pop
+            // pool pop
             GameObject obj = objPool.First.Value;
             objPool.RemoveFirst();
 
             Transform tf = obj.transform;
             Vector3 boxRaySize = Vector3.one * 0.99f;
-            float[] length = new float[2];
-            int[] index = new int[2];
-            index[0] = index[1] = -1;
+            float[] length = {power, power};            // 근원지로부터 물줄기가 뻗어나갈 수 있는 최대 길이 (앞, 뒤)
+            int[] index = {-1, -1};                     // 물줄기와 충돌한 블록의 인덱스
 
             tf.rotation = Quaternion.Euler(rotation);
 
-            // 물폭탄 앞뒤로 BoxCast,
+            // 물폭탄 앞뒤로 BoxCast 하여 물줄기가 통과하지 못하는 충돌체 감지 및 거리 측정 (블록, 벽)
             for (int i = 0; i < 2; ++i)
             {
                 if (Physics.BoxCast(boomPosition, boxRaySize / 2f, tf.forward * ((i == 0) ? 1 : -1), 
@@ -60,30 +59,22 @@ public class WaterStreamGenerator : MonoBehaviour
                         index[i] = hit.collider.GetComponent<BlockController>().Index;
                     }
                 }
-                else
-                {
-                    length[i] = power;
-                }
             }
 
-            Vector3 desiredPos = boomPosition + tf.forward * length[0];
-            desiredPos += boomPosition + -tf.forward * length[1];
-            desiredPos *= 0.5f;
+            // 벽에 막힐 경우 폭발 근원지와 팽창시 위치가 다를 수 있음
+            Vector3 expandedPos = boomPosition + tf.forward * (length[0] + length[1]) * 0.5f;           // 물줄기 팽창시 위치, 앞뒤 충돌체의 위치를 반으로 나눠 중간 위치 획득
+            Vector3 toExpandedVec = expandedPos - boomPosition;                                         // 팽창시 위치까지의 거리 벡터
+            Vector3 expandedScale = (Vector3.one + Vector3.forward * (length[0] + length[1])) * 0.99f;  // 물줄기 최종 크기
 
-            Vector3 desiredMoveVec = desiredPos - boomPosition;
-
-            Vector3 desiredScale = Vector3.one + Vector3.forward * (length[0] + length[1]);
-            desiredScale *= 0.99f;
-
-            obj.transform.position = boomPosition;
-            obj.transform.localScale = Vector3.zero;
+            obj.transform.position = boomPosition;      // 폭발 근원지가 물줄기의 최초 위치
+            obj.transform.localScale = Vector3.zero;    // 물줄기의 크기 0에서 시작
             obj.SetActive(true);
-            obj.GetComponent<WaterStreamController>().StartCoroutine("Boom", new object[4] { desiredPos, desiredMoveVec, desiredScale, index});
+            obj.GetComponent<WaterStreamController>().StartCoroutine("Boom", new object[4] { expandedPos, toExpandedVec, expandedScale, index}); // 실제 물줄기 로직
         }
 
-        generate(new Vector3(0f, 0f, 0f));
-        generate(new Vector3(0f, 90f, 0f));
-        generate(new Vector3(90f, 0f, 0f));
+        generate(new Vector3(0f, 0f, 0f));  // 앞 방향 물줄기
+        generate(new Vector3(0f, 90f, 0f)); // 위 방향 물줄기
+        generate(new Vector3(90f, 0f, 0f)); // 옆 방향 물줄기
     }
 
     // 물줄기 파괴
