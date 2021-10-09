@@ -5,55 +5,41 @@ using Photon.Pun;
 using System;
 using UnityEngine.UI;
 
-#pragma warning disable CS0618
-#pragma warning disable CS0649
-#pragma warning disable CS0109
-
 public class PlayerController : MonoBehaviourPunCallbacks
 {
-    public GameObject waterPrisonPrefab;
+    public GameObject waterPrisonPrefab;    // 물감옥 프리팹                    
 
-    public float Power { set; get; }
-    public float MoveSpeed { set { animator.SetFloat(moveSpeedId, value); } get { return animator.GetFloat(moveSpeedId); } }
-    public float JumpPower { set; get; }
-    public int BombCount { set; get; }
-    public int CurrentBombCount { set; get; }
-    public int ViewID { get { return photonView.ViewID; } }
+    // Network
+    public bool IsMine { get { return photonView.IsMine; } }    // 스크립트를 가진 오브젝트의 소유권이 해당 클라이언트인지 여부
+    public int ViewID { get { return photonView.ViewID; } }     // 플레이어 고유 번호 ( 멀티 )
 
-    public Collider Collider { private set; get; }
-    public BoxCollider BoxCollider { private set; get; }
+    // Game Status
+    public float Power { set; get; }                        // 물줄기
+    public float MoveSpeed { set { animator.SetFloat(moveSpeedId, value); } get { return animator.GetFloat(moveSpeedId); } }    // 이동속도
+    public float JumpPower { set; get; }                    // 점프력
+    public int BombCount { set; get; }                      // 물폭탄 최대 설치 갯수
+    public int CurrentBombCount { set; get; }               // 현재 물폭탄 설치 갯수
 
-    private bool isInputedJump;
-    private bool isMenu;
-
-    private const float GRAVITY = -20f;
-    private const float DRAG = 0.15f;
-    private const float DIE_TIME = 5f;//
-    private Vector3 accel;
-    private Vector3 velocity;
+    // Physics
+    private const float Gravity = -20f; // 중력
+    private const float DieTime = 5f;  // 물감옥에 갇히고 죽기까지의 시간
+    private const float AeroDrag = 0.15f;   // 공기 저항
+    private const float speedRatioOnJump = 0.8f;
+    private float speedByGravity = 0f;
+    private Vector3 velocity;   // 속도
     private Vector3 movement;
 
+    // State
+    private bool isInputedJump;         // 이전 프레임에서 점프키가 눌렸는지 여부
     public bool IsJumping { set { animator.SetBool(isJumpingId, value); } get { return animator.GetBool(isJumpingId); } }
     public bool IsRunning { set { animator.SetBool(isRunningId, value); } get { return animator.GetBool(isRunningId); } }
     public bool IsPushing { set { animator.SetBool(isPushingId, value); } get { return animator.GetBool(isPushingId); } }
     public bool IsPunching { set { animator.SetBool(isPunchingId, value); } get { return animator.GetBool(isPunchingId); } }
     public bool IsHit { set { animator.SetBool(isHitId, value); } get { return animator.GetBool(isHitId); } }
-    public bool IsInWater
-    {
-        set { animator.SetTrigger(inWaterId); animator.SetBool(isInWaterId, value); }
-        get { return animator.GetBool(isInWaterId); }
-    }
+    public bool IsInWater { set { animator.SetTrigger(inWaterId); animator.SetBool(isInWaterId, value); } get { return animator.GetBool(isInWaterId); } }
     public bool IsDie { set { animator.SetBool(isDieId, value); } get { return animator.GetBool(isDieId); } }
 
-    public int StunCnt { set; get; }
-
-    public bool IsMine { get { return photonView.IsMine; } }
-
-    private CharacterController characterController;
-    private Animator animator;
-
-    private const float speedRatioOnJump = 0.8f;
-
+    // State Hash
     private int isJumpingId;
     private int isRunningId;
     private int isInWaterId;
@@ -62,11 +48,17 @@ public class PlayerController : MonoBehaviourPunCallbacks
     private int isPunchingId;
     private int isHitId;
     private int isDieId;
-
     private int moveSpeedId;
+
+    // Component
+    private CharacterController characterController;
+    private Animator animator;
+    public Collider Collider { private set; get; }              
+    public BoxCollider BoxCollider { private set; get; }
 
     void Awake()
     {
+        // 필드 초기화
         cam = Camera.main;
         camTf = Camera.main.transform;
         animator = GetComponent<Animator>();
@@ -74,6 +66,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
         Collider = characterController;
         BoxCollider = GetComponent<BoxCollider>();
 
+        // 애니메이션 해시 초기화
         isJumpingId = Animator.StringToHash("isJumping");
         isRunningId = Animator.StringToHash("isRunning");
         isInWaterId = Animator.StringToHash("isInWater");
@@ -84,6 +77,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
         moveSpeedId = Animator.StringToHash("moveSpeed");
         isDieId = Animator.StringToHash("isDie");
 
+        // 능력치 초기화
         Power = 1;
         MoveSpeed = 1f;
         JumpPower = 7f;
@@ -92,6 +86,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
 
         transform.parent = GameObject.Find("PlayerList").transform;
 
+        // 해당 클라이언트가 컨트롤하는 플레이어에게 카메라 부착 및 플레이어 리스트에 추가
         if (IsMine)
         {
             CameraInit();
@@ -102,86 +97,62 @@ public class PlayerController : MonoBehaviourPunCallbacks
 
     void FixedUpdate()
     {
-        if (photonView.IsMine)
-        {
-            Gravity();
-            Run();
-            Jump();
+        if (!IsMine || IsDie) return;
 
-            velocity += accel * Time.deltaTime;
-            velocity.x *= 1 - DRAG;
-            velocity.z *= 1 - DRAG;
-            if (!IsDie)
-                characterController.Move(transform.rotation * (velocity + movement) * Time.deltaTime);
-            CheckPush();
-        }
+        GravityUpdate();
+        Run();
+        Jump();
+
+        // 공기 저항
+        velocity.x *= 1 - AeroDrag;
+        velocity.z *= 1 - AeroDrag;
+
+        characterController.Move(transform.rotation * (velocity + movement) * Time.deltaTime);
+
+        CheckPush();
     }
 
+    // 물줄기 피격
     void OnTriggerEnter(Collider collider)
     {
-        //if (photonView.IsMine) -> 클라이언트 리스트 성공시 추가
-        if (photonView.IsMine && collider.CompareTag("WaterStream"))
+        if (!IsMine) return;
+
+        if (collider.CompareTag("WaterStream"))
         {
             RPCEvent.Inst.PlayerInWaterPrison(ViewID);
         }
     }
 
-    void OnCollisionStay(Collision collision)
-    {
-        if (IsInWater && collision.gameObject.CompareTag("Player"))
-        {
-            // GameOver
-        }
-    }
-
+    // 블록 푸쉬
     void OnControllerColliderHit(ControllerColliderHit hit)
     {
-        if (photonView.IsMine)
-        {
-            if (hit.gameObject.CompareTag("Block"))
-                Pushing(hit.gameObject, hit.point);
-            if (IsInWater && hit.gameObject.CompareTag("Player"))
-                _Die();
-        }
+        if (!IsMine) return;
+        
+        if (hit.gameObject.CompareTag("Block"))
+            Pushing(hit.gameObject, hit.point);
+        if (IsInWater && hit.gameObject.CompareTag("Player"))
+            _Die();
     }
 
     void Update()
     {
-        if (!photonView.IsMine) return;
+        if (!IsMine) return;
 
         InputMove();
         InputJump();
         InputPutBomb();
         InputPunch();
         InputReverse();
-        InputMenu();
 
         if (transform.position.y < -5f)
             _Die();
     }
 
-    private void InputMenu()
-    {
-        if (!Input.GetKeyDown(KeyCode.Escape)) return;
-
-        isMenu = !isMenu;
-
-        if (isMenu)
-        {
-            Cursor.lockState = CursorLockMode.None;
-        }
-        else
-        {
-            Cursor.lockState = CursorLockMode.Locked;
-        }
-    }
-
     void LateUpdate()
     {
-        if (photonView.IsMine)
-        {
-            RotateCamera();
-        }
+        if (!IsMine) return;
+        
+        RotateCamera();
     }
 
     ///////////////////////////////////////////////////////////////////////
@@ -201,8 +172,8 @@ public class PlayerController : MonoBehaviourPunCallbacks
         velocity = Vector3.zero;
     }
 
-    private float speedSumByGravity = 0f;
-    private void Gravity()
+    // 중력 업데이트
+    private void GravityUpdate()
     {
         if ((characterController.collisionFlags & CollisionFlags.Below) != 0)
         {
@@ -213,11 +184,12 @@ public class PlayerController : MonoBehaviourPunCallbacks
         }
         else
         {
-            velocity.y += GRAVITY * Time.deltaTime;
-            speedSumByGravity += GRAVITY * Time.deltaTime;
+            velocity.y += Gravity * Time.deltaTime;
+            speedByGravity += Gravity * Time.deltaTime;
         }
     }
 
+    // 점프
     private void Jump()
     {
         if (isInputedJump)
@@ -231,13 +203,13 @@ public class PlayerController : MonoBehaviourPunCallbacks
         }
     }
 
+    // 물줄기 피격시
     public void HitWaterStream()
     {
         if (!IsInWater)
         {
             Instantiate(waterPrisonPrefab, transform).name = "WaterPrison";
             IsInWater = true;
-            StunCnt++;
             SoundManager.instance.PlayBubbleAttack();
             StartCoroutine("InWater");
         }
@@ -250,13 +222,14 @@ public class PlayerController : MonoBehaviourPunCallbacks
         {
             yield return null;
             time += Time.deltaTime;
-        } while (time < DIE_TIME);
+        } while (time < DieTime);
         _Die();
     }
 
     private void _Die()
     {
         if (!IsMine) return;
+
         Transform camParentTf = new GameObject("Camera").transform;
         camParentTf.rotation = Quaternion.Euler(Vector3.zero);
         camTf.SetParent(camParentTf);
@@ -320,7 +293,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
         PhotonNetwork.LeaveRoom();
     }
 
-
+    // 이동 방향키 입력 확인
     private void InputMove()
     {
         inputHorizontal = Input.GetAxisRaw("Horizontal") * camDir;
@@ -329,26 +302,28 @@ public class PlayerController : MonoBehaviourPunCallbacks
 
     }
 
+    // 점프키 입력 확인
     private void InputJump()
     {
         if (!Input.GetButtonDown("Jump")) return;
-        if (IsJumping || StunCnt != 0) return;
+        if (IsJumping || IsInWater || IsHit) return;
 
         isInputedJump = true;
     }
 
+    // 물폭탄 설치키 입력 확인
     private void InputPutBomb()
     {
         if (!Input.GetMouseButtonDown(0)) return;
-        if (IsJumping || StunCnt != 0) return;
+        if (IsJumping || IsInWater || IsHit) return;
         if (velocity.y < -0.41f || velocity.y > 0.41f) return;
         if (CurrentBombCount + 1 > BombCount) return;
-        if (isMenu) return;
 
         BombGenerator.Inst.GenerateBomb(this);
         SoundManager.instance.PlayBubbleDrop();
     }
 
+    // 카메라 회전키 입력 확인
     private void InputReverse()
     {
         if (!Input.GetKeyDown(KeyCode.R)) return;
@@ -362,22 +337,23 @@ public class PlayerController : MonoBehaviourPunCallbacks
 
     }
 
+    // 펀치키 입력 확인
     private void InputPunch()
     {
         if (!Input.GetMouseButtonDown(1)) return;
-        if (IsPushing || StunCnt != 0) return;
+        if (IsPushing || IsInWater || IsHit) return;
 
         StartCoroutine("Punch");
     }
 
     private IEnumerator Punch()
     {
-        AnimatorStateInfo animStateInfo = animator.GetCurrentAnimatorStateInfo(0);
+        AnimatorStateInfo animStateInfo = animator.GetCurrentAnimatorStateInfo(0);  // 펀치 애니메이션 획득
         bool isAttack = false;
         const float hitDist = 0.2f;
 
         IsPunching = true;
-        while (!animStateInfo.IsName("Punch"))
+        while (!animStateInfo.IsName("Punch"))  // 펀치 애니메이션으로 변경 까지 대기
         {
             yield return null;
             animStateInfo = animator.GetCurrentAnimatorStateInfo(0);
@@ -389,7 +365,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
             yield return null;
             animStateInfo = animator.GetCurrentAnimatorStateInfo(0);
             float animTime = animStateInfo.normalizedTime;
-            if (!isAttack && animTime > animStateInfo.length * 0.5f && animTime < animStateInfo.length * 0.6f)
+            if (!isAttack && animTime > animStateInfo.length * 0.5f && animTime < animStateInfo.length * 0.6f)  // 애니메이션 50~60% 진행시에 펀치 로직 진행
             {
                 Vector3 boxRaySize = new Vector3(characterController.radius * 2f, characterController.height / 2f, 0.01f);
                 if (Physics.BoxCast(transform.position, boxRaySize / 2f, transform.forward, out RaycastHit hit, transform.rotation, BoxCollider.size.z + hitDist,
@@ -412,7 +388,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
     private void Run()
     {
 
-        if (StunCnt != 0)
+        if (IsInWater || IsHit)
         {
             movement.Set(0f, 0f, 0f);
             return;
@@ -445,7 +421,6 @@ public class PlayerController : MonoBehaviourPunCallbacks
         AnimatorStateInfo animStateInfo = animator.GetCurrentAnimatorStateInfo(0);
 
         IsHit = true;
-        StunCnt++;
         transform.rotation = hitDir;
 
         while (!animStateInfo.IsName("Hit"))
@@ -464,7 +439,6 @@ public class PlayerController : MonoBehaviourPunCallbacks
         }
 
         IsHit = false;
-        StunCnt--;
     }
 
 
@@ -495,6 +469,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
         float requiredHorizontalRotation = Quaternion.LookRotation(pushBlockDir).ToEuler().y * Mathf.Rad2Deg;
         float horizontalRotation = transform.rotation.ToEuler().y * Mathf.Rad2Deg;
 
+        // 허용되는 회전각 안에 드는지 확인
         if (requiredHorizontalRotation + limitPushAngle > horizontalRotation
             && requiredHorizontalRotation - limitPushAngle < horizontalRotation)
             return true;
@@ -508,9 +483,10 @@ public class PlayerController : MonoBehaviourPunCallbacks
 
     private void Pushing(GameObject block, Vector3 hitPoint)
     {
-        if (inputVertical <= 0f || Mathf.Abs(transform.position.y - block.transform.position.y) > 0.1f)
-            return;
-
+        // 동일한 높이에 있는지 확인
+        if (inputVertical <= 0f || Mathf.Abs(transform.position.y - block.transform.position.y) > 0.1f) return;
+        
+        // 밀던 블록이 아닐 경우
         if (pushBlock != block)
         {
             pushBlockTime = 0f;
@@ -522,20 +498,18 @@ public class PlayerController : MonoBehaviourPunCallbacks
         Vector3 hitToBlockDist = pushBlock.transform.position - hitPoint;
         Vector3 dir;
 
+        // x축 방향으로 블록이 밀릴 것인지, z축 방향으로 밀릴 것인지 확인
         if (Math.Abs(hitToBlockDist.x) > Math.Abs(hitToBlockDist.z))
-        {
             hitToBlockDist.Set(hitToBlockDist.x, 0f, 0f);
-        }
         else
-        {
             hitToBlockDist.Set(0f, 0f, hitToBlockDist.z);
-        }
-
         dir = hitToBlockDist.normalized;
 
+        // 밀던 방향과 다를 경우 초기화
         if (pushBlockDir != dir) pushBlockTime = 0f;
         pushBlockDir = dir;
 
+        // 밀기가 시작될 경우, 미는 방향에 맞춰 플레이어 회전
         if (pushBlockTime > requiredPushStartTime && !IsJumping)
         {
             IsPushing = true;
@@ -550,6 +524,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
 
         pushBlockTime += Time.deltaTime;
 
+        // 효과음 재생
         if (pushBlockTime > requiredPushTime && pushBlockController.CanMove(pushBlockDir))
         {
             RPCEvent.Inst.BlockMove(pushBlockController.Index, pushBlockDir);
@@ -588,30 +563,23 @@ public class PlayerController : MonoBehaviourPunCallbacks
 
     private void RotateCamera()
     {
-        if (IsPushing || isMenu || IsDie)
-            return;
+        if (IsPushing || IsDie) return;
 
         float rotateHorizontal = Input.GetAxis("Mouse X") * mouseHorizontalSensitivity;
         float rotateVertical = -Input.GetAxis("Mouse Y") * mouseVerticalSensitivity;
         float scroll = -Input.GetAxis("Mouse ScrollWheel");
 
-        maxTargetToCamDist = Mathf.Clamp(maxTargetToCamDist + scroll, cameraZoomMin, cameraZoomMax);
-
-        if (cameraVerticalRotation + rotateVertical > cameraVerticalRotationMax)
-            rotateVertical = cameraVerticalRotationMax - cameraVerticalRotation;
-        else if (cameraVerticalRotation + rotateVertical < cameraVerticalRotationMin)
-            rotateVertical = cameraVerticalRotationMin - cameraVerticalRotation;
-
-        cameraVerticalRotation += rotateVertical;
+        maxTargetToCamDist = Mathf.Clamp(maxTargetToCamDist + scroll, cameraZoomMin, cameraZoomMax);    // 카메라줌 한계치로 제한
+        cameraVerticalRotation = Mathf.Clamp(cameraVerticalRotation + rotateVertical, cameraVerticalRotationMin, cameraVerticalRotationMax); // 카메라 수직 회전 한계치로 제한
 
         transform.Rotate(0f, rotateHorizontal, 0f);
-        camTf.Rotate(rotateVertical, 0f, 0f);
+        camTf.eulerAngles = new Vector3(cameraVerticalRotation, camTf.eulerAngles.y, camTf.eulerAngles.z);
 
-        //
         Vector3 targetPos = transform.position + transform.rotation * camTargetPivot;
         float targetDist = maxTargetToCamDist;
         Vector3[] rayEndPos = new Vector3[5];
 
+        // 카메라 벽 통과 방지
         rayEndPos[0] = camTf.position;
         rayEndPos[1] = camTf.position + camTf.right * screenHalfWidth;
         rayEndPos[1] += (rayEndPos[1] - targetPos).normalized;
@@ -622,6 +590,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
         rayEndPos[4] = camTf.position + -camTf.up * screenHalfHeight;
         rayEndPos[4] += (rayEndPos[4] - targetPos).normalized;
 
+        // 카메라를 가리는 충돌체 중 가장 멀리있는 쪽으로 카메라 확대
         for (int i = 0; i < rayEndPos.Length; ++i)
         {
             if (Physics.Linecast(targetPos, rayEndPos[i], out RaycastHit hit, ~cameraIgnoreLayerMask))
