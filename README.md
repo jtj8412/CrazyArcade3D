@@ -24,12 +24,14 @@
 ② 방을 개설할 때 입력해야할 란으로 방 제목입니다.  
 ③ 게임 내부에서 사용할 닉네임입니다.  
 ④ 방을 개설할 때 클릭해야 할 입력 버튼입니다
+#     
 
 ![Room Screenshot](https://jtj8412.github.io/resources/imgs/CrazyArcade3D/Room.png)
 ### Room  
 ① 방에 참가한 플레이어들의 닉네임입니다.  
 ② 플레이어들이 소통할 수 있는 채팅창입니다.  
 ③ 게임 시작 버튼으로 방장에게만 활성화 됩니다.  
+#  
 
 ![Player Screenshot](https://jtj8412.github.io/resources/imgs/CrazyArcade3D/Player.png)  
 ![Item Screenshot](https://jtj8412.github.io/resources/imgs/CrazyArcade3D/Item.png)  
@@ -40,3 +42,14 @@
 ② 아이템이며 각각 물줄기의 크기를 늘리는 효과, 최대 물폭탄 설치 갯수를 늘리는 효과, 캐릭터의 이동속도를 늘리는 효과가 있습니다.
 ③ 물폭탄과 물줄기이며 물폭탄 설치 후 일정시간이 지나면 X, Y, Z 세 방향으로 물줄기가 뻗어나갑니다.  
 ④ 블록이며 물폭탄으로 파괴해서 아이템을 획득할 수 있고 캐릭터가 이동하는 방향으로 밀 수도 있습니다.
+#  
+
+![Control Screenshot](https://jtj8412.github.io/resources/imgs/CrazyArcade3D/Control.png)  
+### Control
+○ W/A/S/D:      이동  
+○ SpaceBar:     점프  
+○ R:            카메라 반전
+○ Left Click:   물폭탄 설치 / 관전 플레이어 변경 (죽고난 후)  
+○ Right Click:  펀치 (기절 및 넉백)  
+○ Wheel:        카메라 줌
+
