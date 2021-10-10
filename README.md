@@ -48,7 +48,7 @@
 ### Control
 ○ W/A/S/D:      이동  
 ○ SpaceBar:     점프  
-○ R:            카메라 반전
+○ R:            카메라 반전  
 ○ Left Click:   물폭탄 설치 / 관전 플레이어 변경 (죽고난 후)  
 ○ Right Click:  펀치 (기절 및 넉백)  
 ○ Wheel:        카메라 줌
