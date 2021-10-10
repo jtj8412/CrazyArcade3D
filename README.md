@@ -1,2 +1,5 @@
-# CrazyArcade3D
-2020 유니티 프로젝트
+# CrazyArcade3D Game
+
+![Demo screenshot](https://jtj8412.github.io/resources/imgs/game/CrazyArcade3D.png)
+
+## Introduction
