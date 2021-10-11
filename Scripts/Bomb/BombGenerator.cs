@@ -26,7 +26,7 @@ public class BombGenerator : MonoBehaviour
     }
 
     // 물폭탄 생성
-    public void GenerateBomb(PlayerController playerController)
+    public void CheckGenerateBomb(PlayerController playerController)
     {
         if (objPool.Count == 0)
             CreateBomb();

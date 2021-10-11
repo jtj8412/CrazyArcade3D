@@ -319,7 +319,7 @@ public class PlayerController : MonoBehaviourPunCallbacks
         if (velocity.y < -0.41f || velocity.y > 0.41f) return;
         if (CurrentBombCount + 1 > BombCount) return;
 
-        BombGenerator.Inst.GenerateBomb(this);
+        BombGenerator.Inst.CheckGenerateBomb(this);
         SoundManager.instance.PlayBubbleDrop();
     }
 
